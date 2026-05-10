@@ -117,15 +117,15 @@ System-wide notification center for all operations — uploads, moves, deletions
 
 ---
 
-## 🚀 Getting Started
+### 🚀 Getting Started
 
-### Prerequisites
+#### ⚡ Quick Install (Windows)
+Copy and paste this into your PowerShell to clone and setup everything in one go:
+```powershell
+git clone https://github.com/DaminduRat/TeleNest.-Cloud-System.git; cd TeleNest.-Cloud-System; .\setup.bat
+```
 
-- **[Node.js](https://nodejs.org/)** v18 or higher
-- **npm** (comes with Node.js)
-- A **Telegram** account
-
-### Installation
+#### 🛠️ Manual Installation
 
 **1. Clone the Repository**
 ```bash
@@ -150,9 +150,26 @@ npm install && cd server && npm install && cd ..
 ```
 
 **3. Start the Application**
+
+*Windows:*
+```bash
+# Just double-click run.bat
+```
+
+*Mac / Linux:*
 ```bash
 npm start
 ```
+
+### ⚡ One-Click Workflow (Windows Only)
+
+To make your life easier, use these built-in tools:
+
+- **`setup.bat`**: Installs everything (Run this first).
+- **`run.bat`**: Starts the app (Frontend + Backend).
+- **`sync.bat`**: Adds, commits, and pushes your changes to GitHub in one click.
+
+---
 
 | Service | URL |
 |---|---|
