@@ -24,6 +24,7 @@ const {
 } = require('./telegram');
 
 const app = express();
+console.log('--- TeleNest Security System v2 Active ---');
 app.use(cors());
 app.use(express.json());
 
@@ -92,6 +93,7 @@ const crypto = require('crypto');
 
 async function getDatabase() {
   const uid = await getUserId();
+  if (uid === 'default') throw new Error('User not identified');
   
   if (db) {
     try {
