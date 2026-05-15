@@ -1,7 +1,9 @@
 const { TelegramClient, Api } = require('telegram');
 const { StringSession } = require('telegram/sessions');
 const fs = require('fs');
+const { db } = require('./firebase');
 require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
+
 
 const apiId = parseInt(process.env.API_ID);
 const apiHash = process.env.API_HASH;
@@ -12,12 +14,32 @@ if (fs.existsSync(SESSION_FILE)) {
   sessionString = fs.readFileSync(SESSION_FILE, 'utf-8');
 }
 
-const stringSession = new StringSession(sessionString);
+// StringSession will be initialized inside getClient
+let stringSession = null;
+
 
 let client = null;
 
 async function getClient() {
   if (!client) {
+    // Try to load session from Firestore first
+    if (db) {
+      try {
+        const doc = await db.collection('configs').doc('telegram_session').get();
+        if (doc.exists) {
+          sessionString = doc.data().session;
+          console.log('Session loaded from Firestore');
+        }
+      } catch (err) {
+        console.warn('Failed to load session from Firestore, falling back to file');
+      }
+    }
+
+    if (!sessionString && fs.existsSync(SESSION_FILE)) {
+      sessionString = fs.readFileSync(SESSION_FILE, 'utf-8');
+    }
+
+    const stringSession = new StringSession(sessionString || '');
     client = new TelegramClient(stringSession, apiId, apiHash, {
       connectionRetries: 5,
     });
@@ -25,6 +47,7 @@ async function getClient() {
   }
   return client;
 }
+
 
 async function sendCode(phoneNumber) {
   const c = await getClient();
@@ -43,8 +66,13 @@ async function signIn(phoneNumber, phoneCodeHash, phoneCode) {
       phoneCodeHash,
       phoneCode
     }));
-    fs.writeFileSync(SESSION_FILE, c.session.save());
+    const savedSession = c.session.save();
+    fs.writeFileSync(SESSION_FILE, savedSession);
+    if (db) {
+      await db.collection('configs').doc('telegram_session').set({ session: savedSession, updatedAt: new Date().toISOString() });
+    }
     return { success: true };
+
   } catch (err) {
     if (err.message.includes('SESSION_PASSWORD_NEEDED')) {
       return { requires2FA: true };
@@ -56,8 +84,13 @@ async function signIn(phoneNumber, phoneCodeHash, phoneCode) {
 async function signInWithPassword(password) {
   const c = await getClient();
   await c.signInWithPassword({ apiId, apiHash }, { password: async () => password, onError: (err) => { throw err; } });
-  fs.writeFileSync(SESSION_FILE, c.session.save());
+  const savedSession = c.session.save();
+  fs.writeFileSync(SESSION_FILE, savedSession);
+  if (db) {
+    await db.collection('configs').doc('telegram_session').set({ session: savedSession, updatedAt: new Date().toISOString() });
+  }
   return { success: true };
+
 }
 
 async function createPrivateChannel(title) {

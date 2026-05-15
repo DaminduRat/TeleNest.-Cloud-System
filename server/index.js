@@ -4,6 +4,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
+const { db } = require('./firebase');
 const { 
   sendCode, 
   signIn, 
@@ -26,6 +27,43 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Active session tokens stored in Firestore
+let activeTokens = new Set();
+
+async function loadTokens() {
+  if (db) {
+    try {
+      const doc = await db.collection('configs').doc('auth_tokens').get();
+      if (doc.exists && doc.data().tokens) {
+        activeTokens = new Set(doc.data().tokens);
+      }
+    } catch (e) { console.error('Failed to load tokens:', e.message); }
+  }
+}
+async function saveTokens() {
+  if (db) {
+    try {
+      await db.collection('configs').doc('auth_tokens').set({ tokens: [...activeTokens], updatedAt: new Date().toISOString() });
+    } catch (e) { console.error('Failed to save tokens:', e.message); }
+  }
+}
+loadTokens();
+
+// Auth middleware - protects all /api/ routes except auth routes
+function requireAuth(req, res, next) {
+  // Allow public routes
+  const publicPaths = ['/api/auth/status', '/api/auth/send-code', '/api/auth/login', '/api/auth/login-2fa'];
+  if (publicPaths.includes(req.path) || req.path.startsWith('/s/')) {
+    return next();
+  }
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token || !activeTokens.has(token)) {
+    return res.status(401).json({ error: 'Unauthorized. Please log in.' });
+  }
+  next();
+}
+app.use(requireAuth);
+
 const UPLOADS_DIR = path.resolve(__dirname, 'uploads');
 const THUMBS_DIR = path.resolve(__dirname, 'thumbs');
 [UPLOADS_DIR, THUMBS_DIR].forEach(dir => { if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); });
@@ -36,16 +74,12 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-let cachedUserId = null;
-
 async function getUserId() {
-  if (cachedUserId) return cachedUserId;
   try {
     if (await isAuthorized()) {
       const user = await getMe();
       if (user && user.id) {
-        cachedUserId = user.id.toString();
-        return cachedUserId;
+        return user.id.toString();
       }
     }
   } catch (e) {
@@ -58,37 +92,55 @@ const crypto = require('crypto');
 
 async function getDatabase() {
   const uid = await getUserId();
-  const dbFile = path.resolve(__dirname, `database_${uid}.json`);
-  const legacyFile = path.resolve(__dirname, 'database.json');
   
-  console.log(`Loading database for user ${uid}...`);
-  
-  // Migration logic: If user DB doesn't exist but legacy DB does, migrate it
-  if (!fs.existsSync(dbFile) && fs.existsSync(legacyFile) && uid !== 'default') {
-    console.log(`Migrating legacy database to database_${uid}.json...`);
-    fs.renameSync(legacyFile, dbFile);
+  if (db) {
+    try {
+      const doc = await db.collection('users').doc(uid).get();
+      if (doc.exists) {
+        const data = doc.data();
+        if (!data.folders) data.folders = {};
+        if (!data.shares) data.shares = [];
+        if (!data.folderShares) data.folderShares = [];
+        if (!data.events) data.events = [];
+        return data;
+      }
+    } catch (e) {
+      console.error("Firestore DB Error:", e.message);
+    }
   }
 
+  // Fallback to legacy local JSON if exists
+  const dbFile = path.resolve(__dirname, `database_${uid}.json`);
   if (fs.existsSync(dbFile)) {
     try {
       const data = JSON.parse(fs.readFileSync(dbFile, 'utf-8'));
-      if (!data.shares) data.shares = [];
-      if (!data.folderShares) data.folderShares = [];
-      if (!data.events) data.events = [];
+      // Optional: Migrate to Firestore on first read
+      if (db) {
+        await db.collection('users').doc(uid).set(data);
+        console.log(`Migrated local database_${uid}.json to Firestore`);
+      }
       return data;
-    } catch (e) {
-      console.error("DB Parse Error:", e.message);
-    }
+    } catch (e) {}
   }
+
   return { folders: {}, shares: [], folderShares: [], events: [] };
 }
 
-async function saveDatabase(db) { 
+
+async function saveDatabase(data) { 
   const uid = await getUserId();
+  if (db) {
+    try {
+      await db.collection('users').doc(uid).set(data);
+    } catch (e) {
+      console.error("Firestore Save Error:", e.message);
+    }
+  }
+  // Also keep a local backup for safety if possible (optional)
   const dbFile = path.resolve(__dirname, `database_${uid}.json`);
-  console.log(`Saving database for user ${uid}...`);
-  fs.writeFileSync(dbFile, JSON.stringify(db, null, 2)); 
+  fs.writeFileSync(dbFile, JSON.stringify(data, null, 2)); 
 }
+
 
 async function updateFolderStats(folderName, fileSizeChange, countChange = 1, fileMimeType = null) {
   const db = await getDatabase();
@@ -119,9 +171,16 @@ async function updateFolderStats(folderName, fileSizeChange, countChange = 1, fi
 
 app.get('/api/auth/status', async (req, res) => {
   try {
-    if (await isAuthorized()) {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (token && activeTokens.has(token) && await isAuthorized()) {
         const user = await getMe();
-        return res.json({ authorized: true, user: { id: user.id.toString(), username: user.username, firstName: user.firstName } });
+        const dbData = await getDatabase();
+        const needsInit = Object.keys(dbData.folders || {}).length === 0;
+        return res.json({ 
+          authorized: true, 
+          user: { id: user.id.toString(), username: user.username, firstName: user.firstName },
+          needsInit
+        });
     }
     res.json({ authorized: false });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -132,7 +191,20 @@ app.post('/api/auth/send-code', async (req, res) => {
 });
 
 app.post('/api/auth/login', async (req, res) => {
-  try { res.json(await signIn(req.body.phoneNumber, req.body.phoneCodeHash, req.body.phoneCode)); } catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    const result = await signIn(req.body.phoneNumber, req.body.phoneCodeHash, req.body.phoneCode);
+    if (result.success) {
+      const token = crypto.randomBytes(32).toString('hex');
+      activeTokens.add(token);
+      await saveTokens();
+      
+      const dbData = await getDatabase();
+      const needsInit = Object.keys(dbData.folders || {}).length === 0;
+      
+      return res.json({ ...result, token, needsInit });
+    }
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/workspace/refresh-stats', async (req, res) => {
@@ -172,17 +244,55 @@ app.post('/api/workspace/clear-thumbnails', async (req, res) => {
 
 app.post('/api/auth/logout', async (req, res) => {
   try {
-    const sessionPath = path.resolve(__dirname, 'session.txt');
-    if (fs.existsSync(sessionPath)) fs.unlinkSync(sessionPath);
-    await resetClient();
-    cachedUserId = null;
-    invalidateCache('all'); 
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (token) {
+      activeTokens.delete(token);
+      await saveTokens();
+    }
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// TEMPORARY: Route to wipe the database (DELETE AFTER USE)
+app.post('/api/admin/wipe-db', async (req, res) => {
+  try {
+    const collections = ['users', 'configs'];
+    for (const col of collections) {
+      const snapshot = await db.collection(col).get();
+      const batch = db.batch();
+      snapshot.docs.forEach(doc => batch.delete(doc.ref));
+      await batch.commit();
+    }
+    // Clear active tokens
+    activeTokens.clear();
+    await saveTokens();
+    
+    // Also clear session file if exists
+    const sessionPath = path.resolve(__dirname, 'session.txt');
+    if (fs.existsSync(sessionPath)) fs.unlinkSync(sessionPath);
+    
+    const { resetClient } = require('./telegram');
+    await resetClient();
+    res.json({ success: true, message: 'Database wiped successfully' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
 app.post('/api/auth/2fa', async (req, res) => {
-  try { res.json(await signInWithPassword(req.body.password)); } catch (err) { res.status(500).json({ error: err.message }); }
+  try {
+    const result = await signInWithPassword(req.body.password);
+    if (result.success) {
+      const token = crypto.randomBytes(32).toString('hex');
+      activeTokens.add(token);
+      await saveTokens();
+
+      const dbData = await getDatabase();
+      const needsInit = Object.keys(dbData.folders || {}).length === 0;
+
+      return res.json({ ...result, token, needsInit });
+    }
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.post('/api/workspace/init', async (req, res) => {
@@ -201,19 +311,29 @@ app.post('/api/workspace/init', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.get('/api/settings', (req, res) => {
+app.get('/api/settings', async (req, res) => {
   try {
-    const settings = JSON.parse(fs.readFileSync('./settings.json', 'utf8'));
+    if (db) {
+        const doc = await db.collection('configs').doc('app_settings').get();
+        if (doc.exists) return res.json(doc.data());
+    }
+    const settingsPath = path.resolve(__dirname, 'settings.json');
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
     res.json(settings);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/settings', (req, res) => {
+app.post('/api/settings', async (req, res) => {
   try {
-    fs.writeFileSync('./settings.json', JSON.stringify(req.body, null, 2));
+    if (db) {
+        await db.collection('configs').doc('app_settings').set(req.body);
+    }
+    const settingsPath = path.resolve(__dirname, 'settings.json');
+    fs.writeFileSync(settingsPath, JSON.stringify(req.body, null, 2));
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
 
 app.get('/api/workspace/folders', async (req, res) => {
   const db = await getDatabase();
@@ -580,7 +700,7 @@ app.delete('/api/workspace/shares/:hash', async (req, res) => {
     } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Public Share Endpoint (Downloads the file)
+// Public Share Endpoint (Preview Page)
 app.get('/s/:hash', async (req, res) => {
     try {
         const { hash } = req.params;
@@ -588,6 +708,11 @@ app.get('/s/:hash', async (req, res) => {
         const share = db.shares.find(s => s.hash === hash);
         if (!share) return res.status(404).send('Share not found or expired');
         
+        // If it's a direct download request from the preview page
+        if (req.query.dl === 'true') {
+            return await streamFile(share.channelId, share.messageId, req, res);
+        }
+
         // Track View Event
         share.views = (share.views || 0) + 1;
         db.events.push({
@@ -599,9 +724,66 @@ app.get('/s/:hash', async (req, res) => {
         });
         await saveDatabase(db);
 
-        await streamFile(share.channelId, share.messageId, req, res);
+        const size = (share.size / (1024 * 1024)).toFixed(2);
+        const date = new Date(share.createdAt).toLocaleDateString();
+        const icon = share.mimeType?.startsWith('image/') ? '🖼️' : share.mimeType?.startsWith('video/') ? '🎬' : share.mimeType?.startsWith('audio/') ? '🎵' : '📄';
+        
+        let previewHtml = '';
+        if (share.mimeType?.startsWith('image/')) {
+            previewHtml = `<img src="/api/workspace/view/Shared/${share.messageId}?channelId=${share.channelId}" style="max-width: 100%; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">`;
+        } else if (share.mimeType?.startsWith('video/')) {
+            previewHtml = `<video src="/api/workspace/view/Shared/${share.messageId}?channelId=${share.channelId}" controls style="max-width: 100%; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);"></video>`;
+        } else if (share.mimeType?.startsWith('audio/')) {
+            previewHtml = `
+            <div style="background: rgba(255,255,255,0.05); padding: 40px; border-radius: 32px; border: 1px solid rgba(255,255,255,0.1); width: 100%;">
+                <div style="font-size: 50px; margin-bottom: 20px;">🎵</div>
+                <audio src="/api/workspace/view/Shared/${share.messageId}?channelId=${share.channelId}" controls style="width: 100%;"></audio>
+            </div>`;
+        }
+
+        const html = `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>${share.name} | TeleNest Shared</title>
+            <style>
+                :root { --tg-blue: #2aabee; --bg: #050505; --glass: rgba(255, 255, 255, 0.03); --border: rgba(255, 255, 255, 0.1); }
+                body { font-family: 'Inter', sans-serif; background: var(--bg); color: #fff; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; overflow-x: hidden; }
+                .card { width: 90%; max-width: 700px; background: var(--glass); backdrop-filter: blur(20px); border: 1px solid var(--border); border-radius: 32px; padding: 40px; text-align: center; position: relative; z-index: 10; }
+                .bg-orb { position: fixed; width: 600px; height: 600px; background: radial-gradient(circle, rgba(42, 171, 238, 0.1), transparent 70%); z-index: 1; top: -200px; left: -200px; }
+                h1 { font-size: 1.8rem; margin: 20px 0 10px; word-break: break-all; }
+                .meta { color: #888; font-size: 0.9rem; margin-bottom: 30px; }
+                .preview-box { margin-bottom: 30px; }
+                .btn { display: inline-flex; align-items: center; gap: 10px; background: var(--tg-blue); color: #000; text-decoration: none; padding: 14px 30px; border-radius: 14px; font-weight: 800; transition: 0.2s; }
+                .btn:hover { transform: scale(1.05); }
+                .logo { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); opacity: 0.5; font-weight: 900; letter-spacing: -1px; }
+            </style>
+        </head>
+        <body>
+            <div class="bg-orb"></div>
+            <div class="logo">TeleNest<span style="color: var(--tg-blue)">.</span></div>
+            <div class="card">
+                <div style="font-size: 40px; margin-bottom: 10px;">${icon}</div>
+                <h1>${share.name}</h1>
+                <div class="meta">${size} MB • Shared via TeleNest • ${date}</div>
+                
+                <div class="preview-box">
+                    ${previewHtml || '<div style="opacity: 0.2; padding: 40px; border: 2px dashed var(--border); border-radius: 20px;">Preview not available for this file type</div>'}
+                </div>
+
+                <a href="?dl=true" class="btn">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    Download File
+                </a>
+            </div>
+        </body>
+        </html>`;
+        res.send(html);
     } catch (err) { res.status(500).send('Sharing error: ' + err.message); }
 });
+
 
 app.post('/api/workspace/files/restore', async (req, res) => {
     try {

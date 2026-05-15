@@ -1,18 +1,21 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { Cloud, Shield, Zap, Send, Phone, KeyRound, Lock, Share2, Trash2, PlayCircle } from 'lucide-react';
+import { Shield, Zap, Send, Phone, KeyRound, Lock, Share2, Trash2 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:3001/api';
+import { API_URL as API_BASE } from '../config';
+import { getAuthToken, setAuthToken } from '../config';
+
 
 const features = [
-  { icon: <Shield size={32} color="#10b981" />, title: "Secure Session Privacy", desc: "Your Telegram session is encrypted and stored only on your local device." },
-  { icon: <Lock size={32} color="#3b82f6" />, title: "Private Cloud Nodes", desc: "Files are stored in your own private channels with Telegram's MTProto security." },
-  { icon: <Share2 size={32} color="#facc15" />, title: "Public Sharing", desc: "Generate secure, shareable links for any file or folder in your cloud." },
-  { icon: <PlayCircle size={32} color="#ec4899" />, title: "Instant Streaming", desc: "Watch videos and listen to music directly from your Telegram cloud nodes." },
-  { icon: <Trash2 size={32} color="#ef4444" />, title: "Smart Trash Vault", desc: "Accidentally deleted? Recover files easily or let them auto-clean after 3 days." },
-  { icon: <img src="/logo.png" style={{ width: '48px', height: '48px', objectFit: 'contain' }} />, title: "Infinite Storage", desc: "Leverage Telegram's massive infrastructure for unlimited file storage." },
+  { icon: <Shield size={32} color="#10b981" />, title: "End-to-End Encryption", desc: "Your data is secured using Telegram's battle-tested MTProto protocol, ensuring total privacy." },
+  { icon: <img src="/logo.png" style={{ width: '48px', height: '48px', objectFit: 'contain' }} />, title: "Infinite Storage", desc: "Break free from storage limits. Leverage Telegram's global infrastructure for unlimited files." },
+  { icon: <Zap size={32} color="#3b82f6" />, title: "High-Speed Streaming", desc: "Stream 4K videos and high-fidelity audio instantly without waiting for downloads." },
+  { icon: <Share2 size={32} color="#facc15" />, title: "Smart Sharing", desc: "Create secure, temporary or permanent links to share your assets with anyone, anywhere." },
+  { icon: <Lock size={32} color="#ec4899" />, title: "Private Cloud Nodes", desc: "Organize your data into private cloud nodes that only you can access and control." },
+  { icon: <Trash2 size={32} color="#ef4444" />, title: "Secure Recovery", desc: "Features a dedicated trash vault to protect against accidental deletions with auto-cleanup." },
 ];
+
 
 const FeatureCarousel = () => {
   const [index, setIndex] = useState(0);
@@ -76,13 +79,33 @@ const Landing = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const token = getAuthToken();
+        if (!token) return;
+        const res = await fetch(`${API_BASE}/auth/status`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.authorized) {
+          if (data.needsInit) {
+            navigate('/init');
+          } else {
+            navigate('/dashboard');
+          }
+        }
+      } catch (e) {}
+    };
+    checkAuth();
+
     const handler = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
     };
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
+  }, [navigate]);
+
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
@@ -97,11 +120,13 @@ const Landing = () => {
     try {
       setIsLoading(true);
       setError('');
+      const fullNumber = phoneNumber.startsWith('+') ? phoneNumber : `+94${phoneNumber.replace(/\s+/g, '')}`;
       const res = await fetch(`${API_BASE}/auth/send-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber })
+        body: JSON.stringify({ phoneNumber: fullNumber })
       });
+
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       
@@ -118,18 +143,25 @@ const Landing = () => {
     try {
       setIsLoading(true);
       setError('');
+      const fullNumber = phoneNumber.startsWith('+') ? phoneNumber : `+94${phoneNumber.replace(/\s+/g, '')}`;
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber, phoneCodeHash, phoneCode })
+        body: JSON.stringify({ phoneNumber: fullNumber, phoneCodeHash, phoneCode })
       });
+
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
       if (data.requires2FA) {
         setStep('2FA');
       } else if (data.success) {
-        navigate('/init');
+        if (data.token) setAuthToken(data.token);
+        if (data.needsInit) {
+          navigate('/init');
+        } else {
+          navigate('/dashboard');
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Failed to verify code');
@@ -151,7 +183,12 @@ const Landing = () => {
       if (data.error) throw new Error(data.error);
 
       if (data.success) {
-        navigate('/init');
+        if (data.token) setAuthToken(data.token);
+        if (data.needsInit) {
+          navigate('/init');
+        } else {
+          navigate('/dashboard');
+        }
       }
     } catch (err: any) {
       setError(err.message || 'Failed to verify password');
@@ -186,22 +223,39 @@ const Landing = () => {
         {error && <div style={{ color: '#ef4444', fontSize: '0.9rem', textAlign: 'center', background: 'rgba(239, 68, 68, 0.1)', padding: '8px', borderRadius: '8px' }}>{error}</div>}
         
         {step === 'PHONE' && (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(0,0,0,0.2)', padding: '12px 16px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
-              <Phone size={20} color="var(--tg-blue)" />
-              <input 
-                type="text" 
-                placeholder="Phone Number (e.g. +1234567890)" 
-                value={phoneNumber}
-                onChange={e => setPhoneNumber(e.target.value)}
-                style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', width: '100%' }}
-              />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div style={{ textAlign: 'center', marginBottom: '8px' }}>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 800, marginBottom: '8px' }}>Welcome Back</h2>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Enter your phone number to continue</p>
             </div>
-            <button className="btn-primary" onClick={handleSendCode} disabled={isLoading} style={{ width: '100%', justifyContent: 'center' }}>
-              {isLoading ? 'Sending...' : 'Send Code'}
+            
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.03)', padding: '12px 16px', borderRadius: '14px', border: '1px solid var(--glass-border)', minWidth: '85px', justifyContent: 'center' }}>
+                <span style={{ fontSize: '1.1rem' }}>🇱🇰</span>
+                <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-secondary)' }}>+94</span>
+              </div>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '12px', background: 'rgba(0,0,0,0.2)', padding: '12px 16px', borderRadius: '14px', border: '1px solid var(--glass-border)', transition: '0.3s' }} className="input-focus-ring">
+                <Phone size={18} color="var(--tg-blue)" />
+                <input 
+                  type="text" 
+                  placeholder="71 234 5678" 
+                  value={phoneNumber}
+                  onChange={e => setPhoneNumber(e.target.value)}
+                  style={{ background: 'transparent', border: 'none', color: '#fff', outline: 'none', width: '100%', fontSize: '1rem', fontWeight: 500 }}
+                />
+              </div>
+            </div>
+            
+            <button className="btn-primary" onClick={handleSendCode} disabled={isLoading} style={{ width: '100%', justifyContent: 'center', height: '52px', fontSize: '1rem', borderRadius: '14px' }}>
+              {isLoading ? 'Requesting Access...' : 'Continue with Telegram'}
             </button>
-          </>
+            
+            <p style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)', textAlign: 'center', lineHeight: 1.5 }}>
+              By continuing, you agree to our <span style={{ color: 'var(--tg-blue)' }}>Terms</span> and <span style={{ color: 'var(--tg-blue)' }}>Privacy Policy</span>.
+            </p>
+          </div>
         )}
+
 
         {step === 'CODE' && (
           <>
@@ -262,16 +316,17 @@ const Landing = () => {
           <img src="/logo.png" alt="TeleNest Logo" style={{ width: '120px', height: '120px', objectFit: 'contain' }} />
         </motion.div>
         
-        <h1 style={{ fontSize: '4rem', marginBottom: '16px', letterSpacing: '-1px' }}>
+        <h1 style={{ fontSize: '4.5rem', marginBottom: '16px', letterSpacing: '-2px', fontWeight: 900, lineHeight: 1.1 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', marginBottom: '16px' }}>
-            <span style={{ fontSize: '4rem', fontWeight: 900, color: '#fff', letterSpacing: '-1px', fontFamily: 'var(--font-brand)' }}>TeleNest<span style={{ color: 'var(--tg-blue)' }}>.</span></span>
+            <span style={{ fontFamily: 'var(--font-brand)' }}>TeleNest<span style={{ color: 'var(--tg-blue)' }}>.</span></span>
           </div>
-          Your <span className="text-gradient-blue">Private Nest</span> in the Cloud
+          <span className="text-gradient-blue">Unlimited Cloud.</span> <br/> Total Privacy.
         </h1>
         
-        <p style={{ fontSize: '1.2rem', color: 'var(--text-secondary)', marginBottom: '48px', maxWidth: '600px', margin: '0 auto 48px auto', lineHeight: 1.6 }}>
-          Experience the most secure Telegram-powered cloud. TeleNest creates a private, encrypted bridge to your media with zero-knowledge architecture.
+        <p style={{ fontSize: '1.25rem', color: 'var(--text-secondary)', marginBottom: '48px', maxWidth: '650px', margin: '0 auto 48px auto', lineHeight: 1.6, fontWeight: 500 }}>
+          The world's most advanced Telegram-powered storage system. TeleNest provides an encrypted, high-speed bridge to your personal media with zero compromises on security.
         </p>
+
 
         <AnimatePresence mode="wait">
           <motion.div
@@ -319,25 +374,53 @@ const Landing = () => {
           whileTap={{ scale: 0.95 }}
         >
           <Zap size={18} />
-          Install Desktop App
+          Install App
         </motion.button>
       )}
 
       {/* Landing Footer */}
-      <div style={{ position: 'absolute', bottom: '32px', left: 0, right: 0, textAlign: 'center', opacity: 0.4 }}>
-          <p style={{ fontSize: '0.8rem', marginBottom: '8px' }}>&copy; 2026 TeleNest Cloud. All rights reserved.</p>
-          <a 
-            href="https://damindur.com" 
-            target="_blank" 
-            rel="noopener noreferrer"
-            style={{ fontSize: '0.85rem', color: '#fff', textDecoration: 'none', fontWeight: 600 }}
-            onMouseOver={(e) => e.currentTarget.style.color = 'var(--tg-blue)'}
-            onMouseOut={(e) => e.currentTarget.style.color = '#fff'}
-          >
-            Developed by DaminduR
-          </a>
-      </div>
+      <footer style={{ marginTop: 'auto', paddingTop: '60px', paddingBottom: '40px', width: '100%', maxWidth: '1000px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <img src="/logo.png" alt="Logo" style={{ width: '32px', height: '32px' }} />
+            <div>
+              <span style={{ fontWeight: 900, color: '#fff', fontSize: '1rem' }}>TeleNest<span style={{ color: 'var(--tg-blue)' }}>.</span></span>
+              <div style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.3)', fontWeight: 600 }}>PRIVATE CLOUD SYSTEM</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '32px', fontSize: '0.85rem', color: 'rgba(255,255,255,0.4)' }}>
+            <span style={{ cursor: 'pointer' }} className="footer-link">Infrastructure</span>
+            <span style={{ cursor: 'pointer' }} className="footer-link">Security</span>
+            <span style={{ cursor: 'pointer' }} className="footer-link">Architecture</span>
+          </div>
+
+          <div style={{ textAlign: 'right' }}>
+              <p style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.3)', marginBottom: '4px' }}>&copy; 2026 TeleNest Cloud. All rights reserved.</p>
+              <a 
+                href="https://damindur.com" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                style={{ fontSize: '0.8rem', color: '#fff', textDecoration: 'none', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '6px' }}
+                onMouseOver={(e) => e.currentTarget.style.color = 'var(--tg-blue)'}
+                onMouseOut={(e) => e.currentTarget.style.color = '#fff'}
+              >
+                <div style={{ width: '18px', height: '18px', borderRadius: '4px', background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', fontWeight: 900 }}>DR</div>
+                <span>Developed by DaminduR</span>
+              </a>
+          </div>
+      </footer>
+
+      <style>{`
+        .input-focus-ring:focus-within {
+          border-color: var(--tg-blue) !important;
+          box-shadow: 0 0 0 3px rgba(42, 171, 238, 0.1);
+        }
+        .footer-link:hover {
+          color: #fff;
+        }
+      `}</style>
     </div>
+
   );
 };
 

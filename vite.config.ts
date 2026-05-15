@@ -8,22 +8,23 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icon-512.png'],
+      includeAssets: ['logo.png'],
       manifest: {
         name: 'TeleNest Cloud',
         short_name: 'TeleNest',
         description: 'Next-gen secure cloud storage and communication',
         theme_color: '#0f172a',
         background_color: '#0f172a',
+        start_url: '/dashboard',
         display: 'standalone',
         icons: [
           {
-            src: 'icon-512.png',
+            src: 'logo.png',
             sizes: '512x512',
             type: 'image/png'
           },
           {
-            src: 'icon-512.png',
+            src: 'logo.png',
             sizes: '192x192',
             type: 'image/png'
           }

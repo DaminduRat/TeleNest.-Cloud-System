@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
   MessageCircle, Shield, Activity, RefreshCw, Trash2, LogOut, 
-  Smartphone, Globe, Key, Database, Zap, Archive, Users, Hash, Megaphone, ShieldCheck, Crown
+  Smartphone, Globe, Key, Zap, Archive, Users, Hash, Megaphone, ShieldCheck, Crown
 } from 'lucide-react';
+
 import axios from 'axios';
+import { API_URL } from '../config';
 
 const TelegramManager = ({ showConfirm, showToast }: { 
     showConfirm: (message: string, onConfirm: () => void) => void,
@@ -20,7 +22,7 @@ const TelegramManager = ({ showConfirm, showToast }: {
 
   const fetchStatus = () => {
     const start = Date.now();
-    axios.get('http://localhost:3001/api/auth/status')
+    axios.get(`${API_URL}/auth/status`)
       .then(res => {
         if (res.data.authorized) {
           setUser(res.data.user);
@@ -37,7 +39,7 @@ const TelegramManager = ({ showConfirm, showToast }: {
 
   const fetchChats = () => {
     setLoadingChats(true);
-    axios.get('http://localhost:3001/api/telegram/dialogs')
+    axios.get(`${API_URL}/telegram/dialogs`)
       .then(res => {
         setChats(res.data.chats);
         setLoadingChats(false);
@@ -57,7 +59,7 @@ const TelegramManager = ({ showConfirm, showToast }: {
     showConfirm('Are you sure you want to log out?', async () => {
         setIsProcessing('logout');
         try {
-            await axios.post('http://localhost:3001/api/auth/logout');
+            await axios.post(`${API_URL}/auth/logout`);
             window.location.href = '/';
         } catch (err) {
             showToast('Failed to logout', 'error');
@@ -70,7 +72,7 @@ const TelegramManager = ({ showConfirm, showToast }: {
     showConfirm(confirmMsg, async () => {
         setIsProcessing(action);
         try {
-          await axios.post(`http://localhost:3001/api/workspace/${endpoint}`);
+          await axios.post(`${API_URL}/workspace/${endpoint}`);
           if (endpoint === 'wipe-data') {
             window.location.href = '/';
             return;
@@ -88,7 +90,7 @@ const TelegramManager = ({ showConfirm, showToast }: {
     showConfirm(`${action === 'leave' ? 'Leave' : 'Delete'} "${name}"? This cannot be undone.`, async () => {
         setIsProcessing(`chat-${chatId}`);
         try {
-          await axios.post('http://localhost:3001/api/telegram/chats/action', { chatId, action });
+          await axios.post(`${API_URL}/telegram/chats/action`, { chatId, action });
           fetchChats();
           showToast(`${action === 'leave' ? 'Left' : 'Deleted'} ${name} successfully!`);
         } catch (err) {
@@ -123,8 +125,9 @@ const TelegramManager = ({ showConfirm, showToast }: {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
                   <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }}>{chat.name}</span>
-                  {chat.isCreator && <Crown size={14} color="#facc15" title="Owner" />}
-                  {chat.isAdmin && !chat.isCreator && <ShieldCheck size={14} color="var(--tg-blue)" title="Admin" />}
+                  {chat.isCreator && <Crown size={14} color="#facc15" />}
+                  {chat.isAdmin && !chat.isCreator && <ShieldCheck size={14} color="var(--tg-blue)" />}
+
                 </div>
                 {chat.unread > 0 && <span style={{ background: color, color: '#000', padding: '2px 8px', borderRadius: '12px', fontSize: '0.7rem', fontWeight: 800 }}>{chat.unread}</span>}
               </div>

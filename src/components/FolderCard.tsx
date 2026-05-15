@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Folder, Image, Video, FileText, Music, Download, Share2, Star, Lock, Trash2, MoreVertical, Edit2, X } from 'lucide-react';
+import { Folder, Image, Video, FileText, Music, Download, Share2, Star, Lock, Trash2, MoreVertical, Edit2 } from 'lucide-react';
 
 interface FolderCardProps {
   name: string;
@@ -30,7 +30,7 @@ const getIcon = (name: string, color: string) => {
   }
 };
 
-const FolderCard: React.FC<FolderCardProps> = ({ name, itemCount, size, color, index, type = 'system', progress = 0, onDelete, onRename }) => {
+const FolderCard: React.FC<FolderCardProps> = ({ name, itemCount: _itemCount, size, color, index, type = 'system', progress = 0, onDelete, onRename }) => {
   const [showMenu, setShowMenu] = useState(false);
 
   return (

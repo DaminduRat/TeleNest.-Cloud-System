@@ -1,16 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { 
-  Search, Plus, Bell, Sparkles, UploadCloud, Activity, CheckCircle, 
-  ArrowLeft, File, MoreVertical, Download, Grid, List as ListIcon, 
-  Image as ImageIcon, Video, Music, Headphones, FileText, Trash2, Copy, Scissors, 
-  Move, CheckSquare, Square, X, FolderPlus, Folder, Edit2, Play, Eye, Maximize2, Star, RefreshCw, AlertCircle, Share2, Lock, ShieldCheck, Menu
+  Search, Plus, Bell, CheckCircle, 
+  ArrowLeft, Download, Grid, List as ListIcon, 
+  Image as ImageIcon, Video, Headphones, FileText, Trash2, Copy, 
+  Move, CheckSquare, Square, X, FolderPlus, Folder, Eye, Star, RefreshCw, AlertCircle, Share2, Lock, ShieldCheck, Menu
 } from 'lucide-react';
 import axios from 'axios';
 import Sidebar from '../components/Sidebar';
 import FolderCard from '../components/FolderCard';
 import SettingsView from '../components/SettingsView';
 import TelegramManager from '../components/TelegramManager';
+import { API_URL, API_BASE_URL } from '../config';
+
+
 
 const folderColors: Record<string, string> = {
   'Images': '#FACC15',
@@ -100,12 +104,13 @@ const ThumbnailImage = ({ src, fallback }: { src: string, fallback: React.ReactN
 };
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('dashboard');
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [, setUploadProgress] = useState(0);
   const [folders, setFolders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
   const [folderFiles, setFolderFiles] = useState<any[]>([]);
   const [fetchingFiles, setFetchingFiles] = useState(false);
@@ -114,7 +119,7 @@ const Dashboard = () => {
   const [selectedFiles, setSelectedFiles] = useState<any[]>([]);
   const [isActionModalOpen, setIsActionModalOpen] = useState(false);
   const [actionType, setActionType] = useState<'move' | 'copy' | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [, setIsProcessing] = useState(false);
   
   const [isNewFolderModalOpen, setIsNewFolderModalOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
@@ -125,11 +130,40 @@ const Dashboard = () => {
 
   const [previewFile, setPreviewFile] = useState<any>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') setDeferredPrompt(null);
+  };
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/auth/status`);
+        if (!res.data.authorized) {
+          navigate('/');
+        }
+      } catch (err) {
+        navigate('/');
+      }
+    };
+    checkAuth();
+
     const pollEvents = async () => {
         try {
-            const res = await axios.get('http://localhost:3001/api/workspace/events');
+            const res = await axios.get(`${API_URL}/workspace/events`);
             if (res.data && res.data.length > 0) {
                 res.data.forEach((ev: any) => {
                     addNotification(ev.title, ev.message, 'info');
@@ -139,13 +173,13 @@ const Dashboard = () => {
     };
     const interval = setInterval(pollEvents, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [navigate]);
+
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [sharedFiles, setSharedFiles] = useState<any[]>([]);
   const [folderShares, setFolderShares] = useState<any[]>([]);
-  const [isSharing, setIsSharing] = useState(false);
 
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -163,7 +197,7 @@ const Dashboard = () => {
     const delayDebounceFn = setTimeout(() => {
       if (searchQuery.trim()) {
         setIsSearching(true);
-        axios.get(`http://localhost:3001/api/workspace/search?q=${searchQuery}`)
+        axios.get(`${API_URL}/workspace/search?q=${searchQuery}`)
              .then(res => {
                 setSearchResults(res.data);
                 setIsSearching(false);
@@ -189,7 +223,7 @@ const Dashboard = () => {
 
   const checkVaultStatus = async () => {
     try {
-        const res = await axios.get('http://localhost:3001/api/vault/status');
+        const res = await axios.get(`${API_URL}/vault/status`);
         setIsVaultSetupRequired(!res.data.isSetup);
     } catch (err) { console.error(err); }
   };
@@ -198,7 +232,7 @@ const Dashboard = () => {
 
   const handleUnlockVault = async () => {
     try {
-        const res = await axios.post('http://localhost:3001/api/vault/unlock', { password: vaultPasswordInput });
+        const res = await axios.post(`${API_URL}/vault/unlock`, { password: vaultPasswordInput });
         if (res.data.success) {
             setIsVaultUnlocked(true);
             setActiveFolder('Private Vault');
@@ -219,7 +253,7 @@ const Dashboard = () => {
         return showToast('Passwords do not match', 'error');
     }
     try {
-        await axios.post('http://localhost:3001/api/vault/setup', { password: vaultPasswordInput });
+        await axios.post(`${API_URL}/vault/setup`, { password: vaultPasswordInput });
         setIsVaultSetupRequired(false);
         setIsVaultUnlocked(true);
         setActiveFolder('Private Vault');
@@ -240,8 +274,8 @@ const Dashboard = () => {
     setFetchingFiles(true);
     try {
         const [fileRes, folderRes] = await Promise.all([
-            axios.get('http://localhost:3001/api/workspace/shares'),
-            axios.get('http://localhost:3001/api/workspace/folder-shares')
+            axios.get(`${API_URL}/workspace/shares`),
+            axios.get(`${API_URL}/workspace/folder-shares`)
         ]);
         setSharedFiles(fileRes.data.map((s: any) => ({ ...s, id: s.messageId, type: 'file' })));
         setFolderShares(folderRes.data.map((s: any) => ({ ...s, type: 'folder' })));
@@ -249,28 +283,12 @@ const Dashboard = () => {
     setFetchingFiles(false);
   };
 
-  const handleShareFile = async (file: any) => {
-    try {
-        const res = await axios.post('http://localhost:3001/api/workspace/files/share', {
-            channelId: file.channelId,
-            messageId: file.id,
-            name: file.name,
-            size: file.size,
-            mimeType: file.mimeType
-        });
-        const shareUrl = `${window.location.origin.replace('5173', '3001')}/s/${res.data.share.hash}`;
-        navigator.clipboard.writeText(shareUrl);
-        showToast('Share link copied to clipboard!', 'success');
-        addNotification('Link Generated', `Public share link for "${file.name}" is ready.`, 'info');
-    } catch (err) {
-        showToast('Failed to create share link', 'error');
-    }
-  };
+
 
   const handleShareFolder = async (folderName: string) => {
     try {
-        const res = await axios.post('http://localhost:3001/api/workspace/folders/share', { folderName });
-        const shareUrl = `${window.location.origin.replace('5173', '3001')}/s/folder/${res.data.share.hash}`;
+        const res = await axios.post(`${API_URL}/workspace/folders/share`, { folderName });
+        const shareUrl = `${API_BASE_URL}/s/folder/${res.data.share.hash}`;
         navigator.clipboard.writeText(shareUrl);
         showToast('Folder share link copied!', 'success');
         addNotification('Node Shared', `Gallery link for "${folderName}" created successfully.`, 'info');
@@ -281,7 +299,7 @@ const Dashboard = () => {
 
   const handleStopShare = async (hash: string) => {
     try {
-        await axios.delete(`http://localhost:3001/api/workspace/shares/${hash}`);
+        await axios.delete(`${API_URL}/workspace/shares/${hash}`);
         fetchShares();
         showToast('Sharing stopped', 'success');
     } catch (err) {
@@ -291,7 +309,7 @@ const Dashboard = () => {
 
   const handleStopFolderShare = async (hash: string) => {
     try {
-        await axios.delete(`http://localhost:3001/api/workspace/folder-shares/${hash}`);
+        await axios.delete(`${API_URL}/workspace/folder-shares/${hash}`);
         fetchShares();
         showToast('Folder sharing stopped', 'success');
     } catch (err) {
@@ -300,7 +318,7 @@ const Dashboard = () => {
   };
 
   const fetchFolders = () => {
-    fetch('http://localhost:3001/api/workspace/folders')
+    fetch(`${API_URL}/workspace/folders`)
       .then(res => res.json())
       .then(data => {
         const folderList = Object.keys(data).map(name => ({
@@ -320,18 +338,18 @@ const Dashboard = () => {
     setSelectedFiles([]);
     
     // 1. Initial fetch from current state
-    fetch(`http://localhost:3001/api/workspace/files/${folderName}`)
+    fetch(`${API_URL}/workspace/files/${folderName}`)
       .then(res => res.json())
       .then(data => {
         setFolderFiles(data);
         setFetchingFiles(false);
         
         // 2. Trigger silent sync in background (updates stats and generates missing thumbs)
-        axios.post('http://localhost:3001/api/workspace/sync-folder', { folderName })
+        axios.post(`${API_URL}/workspace/sync-folder`, { folderName })
           .then(() => {
             fetchFolders(); // Update sidebar stats
             // 3. Re-fetch files to ensure we have the absolute latest
-            fetch(`http://localhost:3001/api/workspace/files/${folderName}`)
+            fetch(`${API_URL}/workspace/files/${folderName}`)
               .then(res => res.json())
               .then(newData => setFolderFiles(newData));
           })
@@ -341,7 +359,7 @@ const Dashboard = () => {
 
   useEffect(() => { fetchFolders(); }, []);
 
-  const [uploadStats, setUploadStats] = useState<{ total: number, done: number }>({ total: 0, done: 0 });
+  const [, setUploadStats] = useState<{ total: number, done: number }>({ total: 0, done: 0 });
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
@@ -354,7 +372,7 @@ const Dashboard = () => {
 
     try {
       // Fetch settings to respect maxConcurrentUploads
-      const settingsRes = await axios.get('http://localhost:3001/api/settings');
+      const settingsRes = await axios.get(`${API_URL}/settings`);
       const maxConcurrent = settingsRes.data.maxConcurrentUploads || 3;
 
       const uploadFile = async (file: File) => {
@@ -362,8 +380,8 @@ const Dashboard = () => {
         formData.append('file', file);
         formData.append('folderName', activeFolder || 'auto');
         
-        await axios.post('http://localhost:3001/api/workspace/upload', formData, {
-          onUploadProgress: (p) => {
+        await axios.post(`${API_URL}/workspace/upload`, formData, {
+          onUploadProgress: (_p) => {
              // For multiple files, individual progress is harder to show in one bar, 
              // so we'll show "Files Done / Total" and maybe an average progress.
           }
@@ -396,7 +414,7 @@ const Dashboard = () => {
     try {
       const channelId = file.channelId;
       const source = file.sourceFolder || activeFolder;
-      const response = await axios.get(`http://localhost:3001/api/workspace/download/${activeFolder}/${file.id}?source=${source}&channelId=${channelId}`, { responseType: 'blob' });
+      const response = await axios.get(`${API_URL}/workspace/download/${activeFolder}/${file.id}?source=${source}&channelId=${channelId}`, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
@@ -406,9 +424,28 @@ const Dashboard = () => {
     } catch (error) { showToast("Download failed", 'error'); }
   };
 
+  const handleShareFile = async (file: any) => {
+    try {
+      const res = await axios.post(`${API_URL}/workspace/files/share`, {
+        channelId: file.channelId,
+        messageId: file.id,
+        name: file.name,
+        size: file.size,
+        mimeType: file.mimeType
+      });
+      if (res.data.success) {
+        const url = `${API_BASE_URL}/s/${res.data.share.hash}`;
+        navigator.clipboard.writeText(url);
+        showToast('Share link copied to clipboard!', 'success');
+      }
+    } catch (err) {
+      showToast('Failed to generate share link', 'error');
+    }
+  };
+
   const handleToggleStar = async (file: any) => {
     try {
-      await axios.post('http://localhost:3001/api/workspace/files/star', {
+      await axios.post(`${API_URL}/workspace/files/star`, {
         channelId: file.channelId, 
         messageId: file.id, 
         name: file.name, 
@@ -431,11 +468,11 @@ const Dashboard = () => {
         try {
             if (activeFolder === 'Trash') {
                 for (const file of selectedFiles) {
-                    await axios.post('http://localhost:3001/api/workspace/files/permanent-delete', { channelId: file.channelId, messageId: file.id });
+                    await axios.post(`${API_URL}/workspace/files/permanent-delete`, { channelId: file.channelId, messageId: file.id });
                 }
             } else {
                 for (const file of selectedFiles) {
-                    await axios.post('http://localhost:3001/api/workspace/files/delete', { folderName: activeFolder, source: file.sourceFolder, channelId: file.channelId, messageIds: [file.id] });
+                    await axios.post(`${API_URL}/workspace/files/delete`, { folderName: activeFolder, source: file.sourceFolder, channelId: file.channelId, messageIds: [file.id] });
                 }
             }
             fetchFiles(activeFolder!); fetchFolders(); setSelectedFiles([]);
@@ -449,7 +486,7 @@ const Dashboard = () => {
     setIsProcessing(true);
     try {
         for (const file of selectedFiles) {
-            await axios.post('http://localhost:3001/api/workspace/files/restore', { channelId: file.channelId, messageId: file.id });
+            await axios.post(`${API_URL}/workspace/files/restore`, { channelId: file.channelId, messageId: file.id });
         }
         fetchFiles('Trash'); fetchFolders(); setSelectedFiles([]);
         showToast('Files restored successfully', 'success');
@@ -461,7 +498,7 @@ const Dashboard = () => {
     setIsProcessing(true);
     try {
       for (const file of selectedFiles) {
-          await axios.post('http://localhost:3001/api/workspace/files/move-copy', {
+          await axios.post(`${API_URL}/workspace/files/move-copy`, {
             fromFolder: activeFolder, fromSource: file.sourceFolder, fromChannel: file.channelId, toFolder, messageIds: [file.id], mode: actionType
           });
       }
@@ -478,7 +515,7 @@ const Dashboard = () => {
     // For now, I'll fetch settings on mount or use a global-ish state if available.
     // Actually, I can just read it from the localStorage or a quick check.
     const isDataSaver = localStorage.getItem('telenest_datasaver') === 'true';
-    return `http://localhost:3001/api/workspace/view/${activeFolder}/${file.id}?source=${source}&channelId=${file.channelId}${isDataSaver ? '&dataSaver=true' : ''}`;
+    return `${API_URL}/workspace/view/${activeFolder}/${file.id}?source=${source}&channelId=${file.channelId}${isDataSaver ? '&dataSaver=true' : ''}`;
   };
 
   const openPreview = (file: any) => { setPreviewFile(file); setIsPreviewLoading(true); };
@@ -540,7 +577,7 @@ const Dashboard = () => {
                             {viewMode === 'grid' && (
                               <div className="file-card-preview" onClick={() => openPreview(file)} style={{ width: '100%', height: '140px', background: 'rgba(0,0,0,0.4)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                                  <ThumbnailImage 
-                                    src={`http://localhost:3001/api/workspace/thumbnail/${file.channelId}/${file.id}`} 
+                                    src={`${API_URL}/workspace/thumbnail/${file.channelId}/${file.id}`}
                                     fallback={getFileIcon(file.type, '#FACC15')}
                                  />
                                  <div className="hover-play" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)', opacity: 0 }}><Eye size={32} color="#fff" /></div>
@@ -555,8 +592,10 @@ const Dashboard = () => {
                               </div>
                               <div style={{ display: 'flex', gap: '8px' }}>
                                 <button onClick={() => openPreview(file)} className="btn-icon"><Eye size={16} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); handleShareFile(file); }} className="btn-icon" style={{ color: 'var(--tg-blue)' }}><Share2 size={16} /></button>
                                 <button onClick={() => handleDownload(file)} className="btn-icon"><Download size={16} /></button>
                               </div>
+
                             </div>
                           </motion.div>
                         );
@@ -596,13 +635,13 @@ const Dashboard = () => {
             <div className={viewMode === 'grid' ? 'grid-files-view' : 'list-files-view'} style={{ display: viewMode === 'grid' ? 'grid' : 'flex', flexDirection: 'column', gap: '16px', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
               {folderFiles.map((file) => {
                 const isSelected = !!selectedFiles.find(f => f.id === file.id);
-                const source = file.sourceFolder || activeFolder;
+                // const source = file.sourceFolder || activeFolder;
                 return (
                   <motion.div key={`${file.channelId}_${file.id}`} className={`glass-panel file-card ${isSelected ? 'selected' : ''}`} style={{ padding: viewMode === 'grid' ? '0' : '12px 20px', display: 'flex', flexDirection: viewMode === 'grid' ? 'column' : 'row', alignItems: 'center', gap: '16px', border: isSelected ? '1px solid var(--tg-blue)' : '1px solid var(--glass-border)', overflow: 'hidden' }} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
                     {viewMode === 'grid' && (
                       <div className="file-card-preview" onClick={() => openPreview(file)} style={{ width: '100%', height: '140px', background: 'rgba(0,0,0,0.4)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                          <ThumbnailImage 
-                            src={`http://localhost:3001/api/workspace/thumbnail/${file.channelId}/${file.id}`} 
+                            src={`${API_URL}/workspace/thumbnail/${file.channelId}/${file.id}`}
                             fallback={getFileIcon(file.type, '#FACC15')}
                          />
                          <div className="hover-play" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)', opacity: 0 }}><Eye size={32} color="#fff" /></div>
@@ -638,8 +677,10 @@ const Dashboard = () => {
                             </>
                         )}
                         <button onClick={() => openPreview(file)} className="btn-icon"><Eye size={16} /></button>
+                        <button onClick={(e) => { e.stopPropagation(); handleShareFile(file); }} className="btn-icon" style={{ color: 'var(--tg-blue)' }}><Share2 size={16} /></button>
                         <button onClick={() => handleDownload(file)} className="btn-icon"><Download size={16} /></button>
                       </div>
+
                     </div>
                   </motion.div>
                 );
@@ -685,18 +726,18 @@ const Dashboard = () => {
           <div className="grid-folders">
             {folders.filter(f => f.type === 'custom').map((folder, idx) => (
               <div key={idx} onClick={() => { setActiveFolder(folder.name); fetchFiles(folder.name); }}>
-                <FolderCard index={idx} {...folder} type="custom" onDelete={(e) => { 
+                <FolderCard index={idx} {...folder} type="custom" onDelete={(e: any) => { 
                   e?.stopPropagation();
                   setConfirmDialog({
                     message: `Are you sure you want to delete the node "${folder.name}"?`,
                     onConfirm: () => {
                       setConfirmDialog(null);
-                      axios.delete(`http://localhost:3001/api/workspace/folders/${folder.name}`)
+                      axios.delete(`${API_URL}/workspace/folders/${folder.name}`)
                            .then(() => { fetchFolders(); showToast('Node deleted', 'success'); })
                            .catch(() => showToast('Failed to delete node', 'error'));
                     }
                   });
-                }} onRename={(e) => { e?.stopPropagation(); setFolderToRename(folder.name); setRenamedFolderName(folder.name); setIsRenameModalOpen(true); }} />
+                }} onRename={(e: any) => { e?.stopPropagation(); setFolderToRename(folder.name); setRenamedFolderName(folder.name); setIsRenameModalOpen(true); }} />
               </div>
             ))}
           </div>
@@ -733,7 +774,7 @@ const Dashboard = () => {
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <button 
                         onClick={() => {
-                            const url = `${window.location.origin.replace('5173', '3001')}/s/folder/${folder.hash}`;
+                            const url = `${API_BASE_URL}/s/folder/${folder.hash}`;
                             navigator.clipboard.writeText(url);
                             showToast('Folder link copied!', 'success');
                         }} 
@@ -768,7 +809,7 @@ const Dashboard = () => {
                   <div style={{ display: 'flex', gap: '12px' }}>
                     <button 
                         onClick={() => {
-                            const url = `${window.location.origin.replace('5173', '3001')}/s/${file.hash}`;
+                            const url = `${API_BASE_URL}/s/${file.hash}`;
                             navigator.clipboard.writeText(url);
                             showToast('Link copied!', 'success');
                         }} 
@@ -884,6 +925,8 @@ const Dashboard = () => {
         activeSection={activeSection} 
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
+        showInstall={!!deferredPrompt}
+        onInstall={handleInstallClick}
         onSectionChange={(s) => { 
         setIsSidebarOpen(false); // Close drawer on mobile selection
         setActiveSection(s); 
@@ -1078,7 +1121,7 @@ const Dashboard = () => {
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-panel" style={{ width: '380px', padding: '32px', border: '1px solid var(--tg-blue)' }}>
             <h3>Create New Node</h3>
             <input autoFocus type="text" value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Folder Name..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#fff', margin: '24px 0', outline: 'none' }} />
-            <div style={{ display: 'flex', gap: '12px' }}><button onClick={() => { axios.post('http://localhost:3001/api/workspace/folders/create', { name: newFolderName }).then(()=>{setIsNewFolderModalOpen(false); setNewFolderName(''); fetchFolders();}); }} className="btn-primary" style={{ flex: 1 }}>Create Folder</button><button onClick={() => setIsNewFolderModalOpen(false)} className="btn-icon">Cancel</button></div>
+            <div style={{ display: 'flex', gap: '12px' }}><button onClick={() => { axios.post(`${API_URL}/workspace/folders/create`, { name: newFolderName }).then(()=>{setIsNewFolderModalOpen(false); setNewFolderName(''); fetchFolders();}); }} className="btn-primary" style={{ flex: 1 }}>Create Folder</button><button onClick={() => setIsNewFolderModalOpen(false)} className="btn-icon">Cancel</button></div>
           </motion.div>
         </div>
       )}</AnimatePresence>
@@ -1088,7 +1131,7 @@ const Dashboard = () => {
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-panel" style={{ width: '380px', padding: '32px', border: '1px solid var(--tg-blue)' }}>
             <h3>Rename Node</h3>
             <input autoFocus type="text" value={renamedFolderName} onChange={e => setRenamedFolderName(e.target.value)} placeholder="New Name..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#fff', margin: '24px 0', outline: 'none' }} />
-            <div style={{ display: 'flex', gap: '12px' }}><button onClick={() => { axios.put('http://localhost:3001/api/workspace/folders/rename', { oldName: folderToRename, newName: renamedFolderName }).then(()=>{setIsRenameModalOpen(false); setFolderToRename(null); setRenamedFolderName(''); fetchFolders();}); }} className="btn-primary" style={{ flex: 1 }}>Rename</button><button onClick={() => setIsRenameModalOpen(false)} className="btn-icon">Cancel</button></div>
+            <div style={{ display: 'flex', gap: '12px' }}><button onClick={() => { axios.put(`${API_URL}/workspace/folders/rename`, { oldName: folderToRename, newName: renamedFolderName }).then(()=>{setIsRenameModalOpen(false); setFolderToRename(null); setRenamedFolderName(''); fetchFolders();}); }} className="btn-primary" style={{ flex: 1 }}>Rename</button><button onClick={() => setIsRenameModalOpen(false)} className="btn-icon">Cancel</button></div>
           </motion.div>
         </div>
       )}</AnimatePresence>

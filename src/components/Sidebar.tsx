@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Cloud, 
@@ -7,25 +7,32 @@ import {
   Star, 
   Share2, 
   Lock, 
-  Trash2,
   Settings,
   HardDrive,
+  Zap,
   X
 } from 'lucide-react';
+import { API_URL } from '../config';
+
 
 interface SidebarProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
   isOpen?: boolean;
   onClose?: () => void;
+  showInstall?: boolean;
+  onInstall?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, isOpen, onClose }) => {
-  const [user, setUser] = useState<any>(null);
+
+
+const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, isOpen, onClose, showInstall, onInstall }) => {
+  const [, setUser] = useState<any>(null);
+
   const [storageStats, setStorageStats] = useState({ size: '0 KB', count: 0, percentage: 2 });
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/auth/status')
+    fetch(`${API_URL}/auth/status`)
       .then(res => res.json())
       .then(data => {
         if (data.authorized) {
@@ -36,7 +43,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, isOpe
   }, []);
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/workspace/folders')
+    fetch(`${API_URL}/workspace/folders`)
       .then(res => res.json())
       .then(data => {
         let totalBytes = 0;
@@ -67,7 +74,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, isOpe
       .catch(err => console.error("Failed to fetch storage stats", err));
   }, [activeSection]);
 
-  const navGroups = [
+  const navGroups: { title: string; items: { id: string; label: string; icon: any; color?: string }[] }[] = [
     {
       title: 'Cloud Explorer',
       items: [
@@ -166,7 +173,35 @@ const Sidebar: React.FC<SidebarProps> = ({ activeSection, onSectionChange, isOpe
 
       {/* Bottom Section: Storage & System */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '20px' }}>
+        
+        {showInstall && (
+            <motion.button 
+                whileHover={{ scale: 1.02, background: 'rgba(42, 171, 238, 0.15)' }} 
+                whileTap={{ scale: 0.98 }}
+                onClick={onInstall}
+                style={{
+                    margin: '0 10px 10px',
+                    padding: '14px',
+                    background: 'rgba(42, 171, 238, 0.1)',
+                    border: '1px solid var(--tg-blue)',
+                    borderRadius: '16px',
+                    color: 'var(--tg-blue)',
+                    fontSize: '0.9rem',
+                    fontWeight: 800,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '10px',
+                    cursor: 'pointer'
+                }}
+            >
+                <Zap size={18} fill="var(--tg-blue)" />
+                Install App
+            </motion.button>
+        )}
+
         {/* Storage Stats */}
+
         <div style={{ padding: '16px', background: 'rgba(255,255,255,0.03)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

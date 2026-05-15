@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { CloudCog, CheckCircle, Folder } from 'lucide-react';
+import { API_URL } from '../config';
+import axios from 'axios';
+
 
 const steps = [
   "Authenticating Telegram Session...",
@@ -17,7 +20,7 @@ const Initialization = () => {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(0);
   const [createdFolders, setCreatedFolders] = useState<string[]>([]);
-  const [isApiDone, setIsApiDone] = useState(false);
+  const [, setIsApiDone] = useState(false);
 
   useEffect(() => {
     // Phase 1: Simulation for first few steps
@@ -32,12 +35,9 @@ const Initialization = () => {
     }, 1500);
 
     // Phase 2: Real backend initialization
-    fetch('http://localhost:3001/api/workspace/init', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    })
-    .then(res => res.json())
-    .then(data => {
+    axios.post(`${API_URL}/workspace/init`)
+    .then(res => {
+      const data = res.data;
       if (data.success) {
         // Show actual folders created/mapped
         const folderNames = Object.keys(data.db);
@@ -55,7 +55,6 @@ const Initialization = () => {
     })
     .catch(err => {
       console.error("Workspace init failed", err);
-      // Handle error UX here if needed
     });
 
     return () => clearInterval(interval);

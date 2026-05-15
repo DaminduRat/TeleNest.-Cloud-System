@@ -1,36 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
-  User, Shield, HardDrive, Bell, Eye, LogOut, 
-  ChevronRight, ExternalLink, Info, Check, RefreshCw, Trash2
+  User, Shield, HardDrive, Eye, LogOut, 
+  Check, Trash2, X
 } from 'lucide-react';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { API_URL } from '../config';
+
+
 
 const SettingsView = ({ addNotification, showConfirm }: { 
     addNotification: (title: string, message: string, type: 'info'|'success'|'warning') => void,
     showConfirm: (message: string, onConfirm: () => void) => void
 }) => {
-  const navigate = useNavigate();
   const [user, setUser] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [, setLoading] = useState(true);
+
   const [stats, setStats] = useState({ size: '0 KB', count: 0 });
   const [isClearing, setIsClearing] = useState(false);
   const [archiveStatus, setArchiveStatus] = useState<'idle' | 'loading' | 'done'>('idle');
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
   const [showWipeModal, setShowWipeModal] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [appSettings, setAppSettings] = useState({
+  const [appSettings, setAppSettings] = useState<any>({
     autoDeleteTrash: true,
     trashRetentionDays: 3,
     thumbnailQuality: "high",
     theme: "dark",
-    maxConcurrentUploads: 3
+    maxConcurrentUploads: 3,
+    dataSaverMode: false
   });
+
 
   const fetchSettings = async () => {
     try {
-      const res = await axios.get('http://localhost:3001/api/settings');
+      const res = await axios.get(`${API_URL}/settings`);
       setAppSettings(res.data);
       localStorage.setItem('telenest_datasaver', String(res.data.dataSaverMode));
     } catch (err) {
@@ -43,7 +47,7 @@ const SettingsView = ({ addNotification, showConfirm }: {
     setAppSettings(newSettings);
     if (key === 'dataSaverMode') localStorage.setItem('telenest_datasaver', String(value));
     try {
-      await axios.post('http://localhost:3001/api/settings', newSettings);
+      await axios.post(`${API_URL}/settings`, newSettings);
       showToast('Setting updated!');
       addNotification('Setting Updated', `The "${key}" preference has been saved successfully.`, 'success');
     } catch (err) {
@@ -58,7 +62,7 @@ const SettingsView = ({ addNotification, showConfirm }: {
   };
 
   const fetchStats = () => {
-    axios.get('http://localhost:3001/api/workspace/folders')
+    axios.get(`${API_URL}/workspace/folders`)
       .then(res => {
         let totalBytes = 0;
         let totalCount = 0;
@@ -83,7 +87,7 @@ const SettingsView = ({ addNotification, showConfirm }: {
   const handleRefreshStats = async () => {
     setIsRefreshing(true);
     try {
-      await axios.post('http://localhost:3001/api/workspace/refresh-stats');
+      await axios.post(`${API_URL}/workspace/refresh-stats`);
       fetchStats();
       showToast('Statistics synchronized successfully!');
       addNotification('Storage Synced', 'Cloud nodes have been scanned and stats updated.', 'success');
@@ -97,7 +101,7 @@ const SettingsView = ({ addNotification, showConfirm }: {
 
   useEffect(() => {
     // Fetch User Profile
-    axios.get('http://localhost:3001/api/auth/status')
+    axios.get(`${API_URL}/auth/status`)
       .then(res => {
         if (res.data.authorized) setUser(res.data.user);
         setLoading(false);
@@ -110,7 +114,9 @@ const SettingsView = ({ addNotification, showConfirm }: {
   const handleLogout = async () => {
     showConfirm('Are you sure you want to log out?', async () => {
         try {
-            await axios.post('http://localhost:3001/api/auth/logout');
+            await axios.post(`${API_URL}/auth/logout`);
+            const { clearAuthToken } = await import('../config');
+            clearAuthToken();
             window.location.href = '/';
         } catch (err) {
             showToast('Failed to logout', 'error');
@@ -121,7 +127,7 @@ const SettingsView = ({ addNotification, showConfirm }: {
   const handleClearCache = async () => {
     setIsClearing(true);
     try {
-      await axios.post('http://localhost:3001/api/workspace/clear-thumbnails');
+      await axios.post(`${API_URL}/workspace/clear-thumbnails`);
       showToast('Thumbnails cleared! They will regenerate on next view.');
       addNotification('Cache Cleared', 'Thumbnail cache has been optimized successfully.', 'info');
     } catch (err) {
@@ -135,7 +141,7 @@ const SettingsView = ({ addNotification, showConfirm }: {
   const handleArchiveAll = async () => {
     setArchiveStatus('loading');
     try {
-      await axios.post('http://localhost:3001/api/workspace/folders/archive-all');
+      await axios.post(`${API_URL}/workspace/folders/archive-all`);
       setArchiveStatus('done');
       showToast('All channels moved to Archive!');
       addNotification('Channels Archived', 'All system folders have been moved to your Telegram Archive.', 'success');
@@ -157,7 +163,7 @@ const SettingsView = ({ addNotification, showConfirm }: {
     
     try {
       addNotification('Nuclear Action', 'Initiating full data wipe across all cloud nodes...', 'warning');
-      await axios.post('http://localhost:3001/api/workspace/wipe-data');
+      await axios.post(`${API_URL}/workspace/wipe-data`);
       window.location.href = '/';
     } catch (err) {
       setLoading(false);
@@ -166,7 +172,7 @@ const SettingsView = ({ addNotification, showConfirm }: {
     }
   };
 
-  const sections = [
+  const sections: any[] = [
     {
       title: "Account & Profile",
       icon: <User size={20} color="var(--tg-blue)" />,
@@ -319,7 +325,7 @@ const SettingsView = ({ addNotification, showConfirm }: {
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', flex: 1 }}>
-              {section.items.map((item, i) => (
+              {section.items.map((item: any, i: number) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#fff' }}>{item.label}</div>
