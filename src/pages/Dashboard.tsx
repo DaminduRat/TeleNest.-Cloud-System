@@ -634,22 +634,22 @@ const Dashboard = () => {
           </div>
           {fetchingFiles ? <p>Scanning encrypted nodes...</p> : (
             <div className={viewMode === 'grid' ? 'grid-files-view' : 'list-files-view'} style={{ display: viewMode === 'grid' ? 'grid' : 'flex', flexDirection: 'column', gap: '16px', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))' }}>
-              {folderFiles.map((file) => {
+              {folderFiles.map((file, fileIdx) => {
                 const isSelected = !!selectedFiles.find(f => f.id === file.id);
                 // const source = file.sourceFolder || activeFolder;
                 return (
-                  <motion.div key={`${file.channelId}_${file.id}`} className={`glass-panel file-card ${isSelected ? 'selected' : ''}`} style={{ padding: viewMode === 'grid' ? '0' : '12px 20px', display: 'flex', flexDirection: viewMode === 'grid' ? 'column' : 'row', alignItems: 'center', gap: '16px', border: isSelected ? '1px solid var(--tg-blue)' : '1px solid var(--glass-border)', overflow: 'hidden' }} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}>
+                  <motion.div key={`${file.channelId}_${file.id}`} className={`glass-panel file-card ${isSelected ? 'selected' : ''}`} style={{ padding: viewMode === 'grid' ? '0' : '8px 12px', display: 'flex', flexDirection: viewMode === 'grid' ? 'column' : 'row', alignItems: 'center', gap: viewMode === 'grid' ? '0' : '10px', border: isSelected ? '1px solid var(--tg-blue)' : '1px solid var(--glass-border)', overflow: 'hidden' }} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: fileIdx * 0.02 }}>
                     {viewMode === 'grid' && (
-                      <div className="file-card-preview" onClick={() => openPreview(file)} style={{ width: '100%', height: '140px', background: 'rgba(0,0,0,0.4)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                      <div className="file-card-preview" onClick={() => openPreview(file)} style={{ width: '100%', height: 'clamp(80px, 18vw, 140px)', background: 'rgba(0,0,0,0.4)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
                          <ThumbnailImage 
                             src={`${API_URL}/workspace/thumbnail/${file.channelId}/${file.id}`}
                             fallback={getFileIcon(file.type, '#FACC15')}
                          />
-                         <div className="hover-play" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)', opacity: 0 }}><Eye size={32} color="#fff" /></div>
+                         <div className="hover-play" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.3)', opacity: 0 }}><Eye size={24} color="#fff" /></div>
                       </div>
                     )}
 
-                    <div style={{ padding: viewMode === 'grid' ? '12px' : '0', display: 'flex', flexDirection: viewMode === 'grid' ? 'column' : 'row', alignItems: 'center', gap: '16px', width: '100%' }}>
+                    <div style={{ padding: viewMode === 'grid' ? '8px' : '0', display: 'flex', flexDirection: viewMode === 'grid' ? 'column' : 'row', alignItems: 'center', gap: viewMode === 'grid' ? '6px' : '10px', width: '100%' }}>
                       {/* Selection & Star Buttons for List View */}
                       {viewMode === 'list' && (
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -659,27 +659,26 @@ const Dashboard = () => {
                       )}
 
                       <div style={{ flex: 1, minWidth: 0, textAlign: 'left', cursor: 'pointer' }} onClick={() => openPreview(file)}>
-                        <div style={{ fontWeight: 600, fontSize: '0.9rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={file.name}>
-                          {truncateFileName(file.name, file.id)}
+                        <div style={{ fontWeight: 600, fontSize: 'clamp(0.7rem, 2vw, 0.9rem)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={file.name}>
+                          {truncateFileName(file.name, file.id, window.innerWidth < 768 ? 16 : 24)}
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{formatSize(file.size)} {file.sourceFolder ? `• in ${file.sourceFolder}` : ''}</div>
+                        <div style={{ fontSize: 'clamp(0.6rem, 1.5vw, 0.75rem)', color: 'var(--text-secondary)' }}>{formatSize(file.size)}</div>
                       </div>
 
                       {/* Action Buttons Row */}
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexWrap: 'nowrap' }}>
                         {viewMode === 'grid' && (
                             <>
-                                <button onClick={(e) => { e.stopPropagation(); handleToggleStar(file); }} className="btn-icon" style={{ background: '#000', border: '1px solid rgba(255,255,255,0.1)', width: '32px', height: '32px' }}>
-                                    <Star size={14} fill={file.isStarred ? "#FACC15" : "none"} color={file.isStarred ? "#FACC15" : "#fff"} />
+                                <button onClick={(e) => { e.stopPropagation(); handleToggleStar(file); }} className="btn-icon" style={{ background: '#000', border: '1px solid rgba(255,255,255,0.1)', width: '28px', height: '28px', minWidth: '28px' }}>
+                                    <Star size={12} fill={file.isStarred ? "#FACC15" : "none"} color={file.isStarred ? "#FACC15" : "#fff"} />
                                 </button>
-                                <button onClick={(e) => { e.stopPropagation(); setSelectedFiles(p => p.find(f => f.id === file.id) ? p.filter(f => f.id !== file.id) : [...p, file]); }} className="btn-icon" style={{ background: isSelected ? 'var(--tg-blue)' : '#000', border: '1px solid rgba(255,255,255,0.1)', width: '32px', height: '32px' }}>
-                                    {isSelected ? <CheckSquare size={14} color="#000" /> : <Square size={14} color="#fff" />}
+                                <button onClick={(e) => { e.stopPropagation(); setSelectedFiles(p => p.find(f => f.id === file.id) ? p.filter(f => f.id !== file.id) : [...p, file]); }} className="btn-icon" style={{ background: isSelected ? 'var(--tg-blue)' : '#000', border: '1px solid rgba(255,255,255,0.1)', width: '28px', height: '28px', minWidth: '28px' }}>
+                                    {isSelected ? <CheckSquare size={12} color="#000" /> : <Square size={12} color="#fff" />}
                                 </button>
                             </>
                         )}
-                        <button onClick={() => openPreview(file)} className="btn-icon"><Eye size={16} /></button>
-                        <button onClick={(e) => { e.stopPropagation(); handleShareFile(file); }} className="btn-icon" style={{ color: 'var(--tg-blue)' }}><Share2 size={16} /></button>
-                        <button onClick={() => handleDownload(file)} className="btn-icon"><Download size={16} /></button>
+                        <button onClick={() => openPreview(file)} className="btn-icon" style={{ width: '28px', height: '28px', minWidth: '28px' }}><Eye size={14} /></button>
+                        <button onClick={() => handleDownload(file)} className="btn-icon" style={{ width: '28px', height: '28px', minWidth: '28px' }}><Download size={14} /></button>
                       </div>
 
                     </div>
@@ -967,34 +966,34 @@ const Dashboard = () => {
         />
       )}
       <div className="main-content">
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', gap: '16px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
             <button 
                 onClick={() => setIsSidebarOpen(true)} 
                 className="btn-icon mobile-only"
-                style={{ background: 'var(--tg-blue)', color: '#000', border: 'none' }}
+                style={{ background: 'var(--tg-blue)', color: '#000', border: 'none', width: '36px', height: '36px', minWidth: '36px' }}
             >
-                <Menu size={20} />
+                <Menu size={18} />
             </button>
 
             {(activeFolder || searchQuery) && <button onClick={() => { setActiveFolder(null); setSearchQuery(''); }} className="btn-icon desktop-only"><ArrowLeft size={20} /></button>}
-            {(activeFolder || searchQuery) && <button onClick={() => { setActiveFolder(null); setSearchQuery(''); }} className="btn-icon mobile-only" style={{ width: '32px', height: '32px' }}><ArrowLeft size={16} /></button>}
+            {(activeFolder || searchQuery) && <button onClick={() => { setActiveFolder(null); setSearchQuery(''); }} className="btn-icon mobile-only" style={{ width: '32px', height: '32px', minWidth: '32px' }}><ArrowLeft size={16} /></button>}
             
-            <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
-                <Search size={20} style={{ position: 'absolute', left: '16px', top: '50%', transform: 'translateY(-50%)', color: isSearching ? 'var(--tg-blue)' : 'var(--text-secondary)' }} />
+            <div style={{ position: 'relative', flex: 1, maxWidth: '400px', minWidth: 0 }}>
+                <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: isSearching ? 'var(--tg-blue)' : 'var(--text-secondary)' }} />
                 <input 
                     type="text" 
-                    placeholder="Search across all nodes..." 
+                    placeholder="Search..." 
                     value={searchQuery}
                     onChange={(e) => handleSearch(e.target.value)}
-                    style={{ width: '100%', padding: '14px 16px 14px 48px', borderRadius: '16px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: '#fff' }} 
+                    style={{ width: '100%', padding: '10px 12px 10px 36px', borderRadius: '12px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', color: '#fff', fontSize: '0.85rem' }} 
                 />
-                {isSearching && <div className="spinner" style={{ position: 'absolute', right: '16px', top: '50%', transform: 'translateY(-50%)', width: '16px', height: '16px', border: '2px solid rgba(250, 204, 21, 0.1)', borderTopColor: 'var(--tg-blue)', borderRadius: '50%' }} />}
+                {isSearching && <div className="spinner" style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', width: '14px', height: '14px', border: '2px solid rgba(250, 204, 21, 0.1)', borderTopColor: 'var(--tg-blue)', borderRadius: '50%' }} />}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <motion.button className="btn-primary" onClick={() => fileInputRef.current?.click()} disabled={isUploading} style={{ padding: '10px 16px', fontSize: '0.9rem' }}>
-                <Plus size={18} />
+            <motion.button className="btn-primary" onClick={() => fileInputRef.current?.click()} disabled={isUploading} style={{ padding: '8px 12px', fontSize: '0.85rem' }}>
+                <Plus size={16} />
                 <span className="desktop-only">{isUploading ? `Uploading...` : 'Upload'}</span>
             </motion.button>
             <input type="file" multiple ref={fileInputRef} style={{ display: 'none' }} onChange={handleFileUpload} />
@@ -1011,7 +1010,7 @@ const Dashboard = () => {
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 10, scale: 0.95 }}
                         className="glass-panel"
-                        style={{ position: 'absolute', top: '60px', right: '0', width: '320px', zIndex: 500, padding: '0', overflow: 'hidden', border: '1px solid var(--tg-blue)', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}
+                        style={{ position: 'fixed', top: '60px', right: '12px', width: 'min(320px, calc(100vw - 24px))', zIndex: 500, padding: '0', overflow: 'hidden', border: '1px solid var(--tg-blue)', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }}
                     >
                         <div style={{ padding: '16px', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)' }}>
                             <span style={{ fontWeight: 700 }}>Notifications</span>
@@ -1045,8 +1044,8 @@ const Dashboard = () => {
         </header>
 
         <AnimatePresence>{selectedFiles.length > 0 && (
-          <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -50, opacity: 0 }} className="glass-panel" style={{ position: 'fixed', top: '100px', left: '50%', transform: 'translateX(-50%)', zIndex: 100, padding: '12px 24px', display: 'flex', gap: '20px', background: 'rgba(10,10,10,0.95)', border: '1px solid var(--tg-blue)', boxShadow: '0 10px 40px rgba(0,0,0,0.8)', borderRadius: '20px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', paddingRight: '20px', borderRight: '1px solid rgba(255,255,255,0.1)' }}><span>{selectedFiles.length} selected</span><button onClick={() => setSelectedFiles([])} className="btn-icon" style={{ width: '24px', height: '24px' }}><X size={14} /></button></div>
+          <motion.div initial={{ y: -50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -50, opacity: 0 }} className="glass-panel" style={{ position: 'fixed', top: '80px', left: '50%', transform: 'translateX(-50%)', zIndex: 100, padding: '8px 12px', display: 'flex', gap: '8px', background: 'rgba(10,10,10,0.95)', border: '1px solid var(--tg-blue)', boxShadow: '0 10px 40px rgba(0,0,0,0.8)', borderRadius: '14px', maxWidth: 'calc(100vw - 24px)', flexWrap: 'wrap', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingRight: '8px', borderRight: '1px solid rgba(255,255,255,0.1)' }}><span style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{selectedFiles.length} sel.</span><button onClick={() => setSelectedFiles([])} className="btn-icon" style={{ width: '24px', height: '24px' }}><X size={14} /></button></div>
             <div style={{ display: 'flex', gap: '8px' }}>
                 {activeFolder === 'Trash' ? (
                     <>
@@ -1119,7 +1118,7 @@ const Dashboard = () => {
       {/* Modal Components */}
       <AnimatePresence>{isNewFolderModalOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}>
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-panel" style={{ width: '380px', padding: '32px', border: '1px solid var(--tg-blue)' }}>
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-panel" style={{ width: 'min(380px, calc(100vw - 32px))', padding: '24px', border: '1px solid var(--tg-blue)' }}>
             <h3>Create New Node</h3>
             <input autoFocus type="text" value={newFolderName} onChange={e => setNewFolderName(e.target.value)} placeholder="Folder Name..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#fff', margin: '24px 0', outline: 'none' }} />
             <div style={{ display: 'flex', gap: '12px' }}><button onClick={() => { axios.post(`${API_URL}/workspace/folders/create`, { name: newFolderName }).then(()=>{setIsNewFolderModalOpen(false); setNewFolderName(''); fetchFolders();}); }} className="btn-primary" style={{ flex: 1 }}>Create Folder</button><button onClick={() => setIsNewFolderModalOpen(false)} className="btn-icon">Cancel</button></div>
@@ -1129,7 +1128,7 @@ const Dashboard = () => {
 
       <AnimatePresence>{isRenameModalOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}>
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-panel" style={{ width: '380px', padding: '32px', border: '1px solid var(--tg-blue)' }}>
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-panel" style={{ width: 'min(380px, calc(100vw - 32px))', padding: '24px', border: '1px solid var(--tg-blue)' }}>
             <h3>Rename Node</h3>
             <input autoFocus type="text" value={renamedFolderName} onChange={e => setRenamedFolderName(e.target.value)} placeholder="New Name..." style={{ width: '100%', padding: '12px 16px', borderRadius: '12px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)', color: '#fff', margin: '24px 0', outline: 'none' }} />
             <div style={{ display: 'flex', gap: '12px' }}><button onClick={() => { axios.put(`${API_URL}/workspace/folders/rename`, { oldName: folderToRename, newName: renamedFolderName }).then(()=>{setIsRenameModalOpen(false); setFolderToRename(null); setRenamedFolderName(''); fetchFolders();}); }} className="btn-primary" style={{ flex: 1 }}>Rename</button><button onClick={() => setIsRenameModalOpen(false)} className="btn-icon">Cancel</button></div>
@@ -1139,7 +1138,7 @@ const Dashboard = () => {
 
       <AnimatePresence>{isActionModalOpen && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}>
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-panel" style={{ width: '400px', padding: '32px' }}>
+          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass-panel" style={{ width: 'min(400px, calc(100vw - 32px))', padding: '24px' }}>
             <h3>Select Destination Node</h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px', maxHeight: '300px', overflowY: 'auto' }}>
               {folders.filter(f=>!['Favorites','Trash'].includes(f.name)).map(f => (
