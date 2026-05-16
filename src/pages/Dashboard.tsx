@@ -367,34 +367,36 @@ const Dashboard = () => {
     if (!files || files.length === 0) return;
     
     const fileList = Array.from(files);
-    setUploadStats({ total: fileList.length, done: 0 });
     setIsUploading(true);
     setUploadProgress(0);
+    setUploadStats({ total: fileList.length, done: 0 });
+
+    const fileProgresses = new Array(fileList.length).fill(0);
 
     try {
-      // Fetch settings to respect maxConcurrentUploads
       const settingsRes = await axios.get(`${API_URL}/settings`);
       const maxConcurrent = settingsRes.data.maxConcurrentUploads || 3;
 
-      const uploadFile = async (file: File) => {
+      const uploadSingleFile = async (file: File, index: number) => {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('folderName', activeFolder || 'auto');
         
         await axios.post(`${API_URL}/workspace/upload`, formData, {
-          onUploadProgress: (_p) => {
-             // For multiple files, individual progress is harder to show in one bar, 
-             // so we'll show "Files Done / Total" and maybe an average progress.
+          onUploadProgress: (p) => {
+            if (p.total) {
+              fileProgresses[index] = (p.loaded / p.total) * 100;
+              const overall = fileProgresses.reduce((a, b) => a + b, 0) / fileList.length;
+              setUploadProgress(Math.round(overall));
+            }
           }
         });
         setUploadStats(prev => ({ ...prev, done: prev.done + 1 }));
       };
 
-      // Simple queue for parallel uploads
       for (let i = 0; i < fileList.length; i += maxConcurrent) {
         const chunk = fileList.slice(i, i + maxConcurrent);
-        await Promise.all(chunk.map(f => uploadFile(f)));
-        setUploadProgress(Math.round(((i + chunk.length) / fileList.length) * 100));
+        await Promise.all(chunk.map((f, idx) => uploadSingleFile(f, i + idx)));
       }
 
       fetchFolders(); if (activeFolder) fetchFiles(activeFolder);
@@ -1180,6 +1182,42 @@ const Dashboard = () => {
           >
             {toast.type === 'error' ? <AlertCircle size={20} /> : <CheckCircle size={20} />}
             <span style={{ fontWeight: 500 }}>{toast.message}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isUploading && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            style={{
+              position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
+              background: 'rgba(15, 15, 15, 0.95)', backdropFilter: 'blur(20px)',
+              padding: '20px 24px', borderRadius: '24px', border: '1px solid var(--tg-blue)',
+              boxShadow: '0 20px 50px rgba(0,0,0,0.5)', zIndex: 1000,
+              width: 'min(400px, 90%)', display: 'flex', flexDirection: 'column', gap: '12px'
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div className="pulse-animation" style={{ width: '10px', height: '10px', borderRadius: '50%', background: 'var(--tg-blue)' }} />
+                <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>Uploading {uploadStats.total} files...</span>
+              </div>
+              <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>{uploadStats.done} of {uploadStats.total} done</span>
+            </div>
+            
+            <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+              <motion.div 
+                initial={{ width: 0 }}
+                animate={{ width: `${uploadProgress}%` }}
+                style={{ height: '100%', background: 'var(--tg-blue)', boxShadow: '0 0 10px var(--tg-blue)' }}
+              />
+            </div>
+            <div style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--tg-blue)', fontWeight: 700 }}>
+              {uploadProgress}% Complete
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
