@@ -37,16 +37,29 @@ async function loadTokens() {
       const doc = await db.collection('configs').doc('auth_tokens').get();
       if (doc.exists && doc.data().tokens) {
         activeTokens = new Set(doc.data().tokens);
+        return;
       }
     } catch (e) { console.error('Failed to load tokens:', e.message); }
   }
+  const tokenFile = path.resolve(__dirname, 'active_tokens.json');
+  if (fs.existsSync(tokenFile)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(tokenFile, 'utf8'));
+      if (data.tokens) activeTokens = new Set(data.tokens);
+    } catch (e) { console.error('Failed to load local tokens:', e.message); }
+  }
 }
+
 async function saveTokens() {
   if (db) {
     try {
       await db.collection('configs').doc('auth_tokens').set({ tokens: [...activeTokens], updatedAt: new Date().toISOString() });
     } catch (e) { console.error('Failed to save tokens:', e.message); }
   }
+  const tokenFile = path.resolve(__dirname, 'active_tokens.json');
+  try {
+    fs.writeFileSync(tokenFile, JSON.stringify({ tokens: [...activeTokens] }));
+  } catch (e) {}
 }
 // Auth middleware - protects all /api/ routes except auth routes
 function requireAuth(req, res, next) {
