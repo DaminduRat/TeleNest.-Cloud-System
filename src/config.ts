@@ -18,7 +18,6 @@ export function clearAuthToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
-// Axios interceptor - auto attach token to every request
 axios.interceptors.request.use((config) => {
   const token = getAuthToken();
   if (token) {
@@ -26,3 +25,14 @@ axios.interceptors.request.use((config) => {
   }
   return config;
 });
+
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401 && window.location.pathname !== '/') {
+      clearAuthToken();
+      window.location.href = '/';
+    }
+    return Promise.reject(error);
+  }
+);
